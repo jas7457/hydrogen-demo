@@ -14,7 +14,8 @@
     "lint": "eslint --ext .js,.jsx,.ts,.tsx src",
     "lint-ts": "tsc --noEmit",
     "test": "WATCH=true vitest",
-    "test:ci": "yarn build -t node && vitest run"
+    "test:ci": "yarn build -t node && vitest run",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
     "@shopify/cli": "3.23.0",
@@ -25,6 +26,7 @@
     "@types/react": "^18.0.14",
     "eslint": "^8.18.0",
     "eslint-plugin-hydrogen": "^0.12.2",
+    "patch-package": "^6.5.0",
     "playwright": "^1.22.2",
     "postcss": "^8.4.14",
     "postcss-import": "^14.1.0",

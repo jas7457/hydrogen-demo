@@ -155,7 +155,7 @@ function parseItem(customPrefixes = {}) {
       Currently the MenuAPI only returns online store urls e.g — xyz.myshopify.com/..
       Note: update logic when API is updated to include the active qualified domain
     */
-    const isInternalLink = /\.myshopify\.com/g.test(item.url);
+    const isInternalLink = /\.myshopify\.com|\.spin\.dev/g.test(item.url);
 
     const parsedItem = isInternalLink
       ? // internal links
@@ -271,4 +271,16 @@ export function passwordValidation(password: HTMLInputElement) {
   }
 
   return 'Password must be at least 6 characters';
+}
+
+/**
+ * A hack to fix image urls. Don't actually use this in any production code!!!
+ * This is necessary because storefront renderer api doesn't return the correct url for images like core does.
+ * This should only be temporary for this POC, as I'm told this isn't a problem in production
+ */
+export function fixImageUrl(url: string) {
+  return url.replace(
+    'https://cdn.shopify.com',
+    'https://cdn.shopify.hydrogen-demo.jason-addleman.us.spin.dev',
+  );
 }

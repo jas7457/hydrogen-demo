@@ -16,7 +16,7 @@ export function SearchPage({
         </Heading>
         <form className="relative flex w-full text-heading">
           <Input
-            defaultValue={searchTerm}
+            defaultValue={searchTerm ?? ''}
             placeholder="Search…"
             type="search"
             variant="search"

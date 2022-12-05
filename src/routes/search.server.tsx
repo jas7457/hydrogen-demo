@@ -10,18 +10,19 @@ import {
   useServerAnalytics,
 } from '@shopify/hydrogen';
 
-import {PRODUCT_CARD_FRAGMENT} from '~/lib/fragments';
-import {ProductGrid, Section, Text} from '~/components';
+import {
+  ARTICLE_CARD_FRAGMENT,
+  PAGE_CARD_FRAGMENT,
+  PRODUCT_CARD_FRAGMENT,
+} from '~/lib/fragments';
+import {Filters, ProductGrid, Section, Text} from '~/components';
 import {NoResultRecommendations, SearchPage} from '~/components/index.server';
 import {PAGINATION_SIZE} from '~/lib/const';
-import type {Collection} from '@shopify/hydrogen/storefront-api-types';
 import {Suspense} from 'react';
 
 export default function Search({
-  pageBy = PAGINATION_SIZE,
   params,
 }: {
-  pageBy?: number;
   params: HydrogenRouteProps['params'];
 }) {
   const {
@@ -36,13 +37,11 @@ export default function Search({
 
   const {data} = useShopQuery<any>({
     query: SEARCH_QUERY,
-    variables: {
+    variables: getSearchVariables(searchParams, {
       handle,
-      country: countryCode,
-      language: languageCode,
-      pageBy,
-      searchTerm,
-    },
+      countryCode,
+      languageCode,
+    }),
     preload: true,
   });
 
@@ -54,12 +53,13 @@ export default function Search({
     },
   });
 
-  const products = data?.products;
-  const noResults = products?.nodes?.length === 0;
+  const resourceConnection = data?.search;
+  const noResults = (resourceConnection?.nodes ?? []).length === 0;
 
   if (!searchTerm || noResults) {
     return (
       <SearchPage searchTerm={searchTerm ? decodeURI(searchTerm) : null}>
+        <Filters filters={resourceConnection?.productFilters ?? []} />
         {noResults && (
           <Section padding="x">
             <Text className="opacity-50">No results, try something else.</Text>
@@ -78,14 +78,49 @@ export default function Search({
   return (
     <SearchPage searchTerm={decodeURI(searchTerm)}>
       <Section>
+        <Filters filters={resourceConnection.productFilters} />
         <ProductGrid
           key="search"
-          url={`/search?country=${countryCode}&q=${searchTerm}`}
-          collection={{products} as Collection}
+          url={`/search?country=${countryCode}&language=${languageCode}&q=${searchTerm}`}
+          collectionType="search"
+          resourceConnection={resourceConnection}
         />
       </Section>
     </SearchPage>
   );
+}
+
+function getSearchVariables(
+  searchParams: URLSearchParams,
+  {
+    handle,
+    countryCode,
+    languageCode,
+  }: {handle: string; countryCode: string | null; languageCode: string | null},
+) {
+  const searchTerm = searchParams.get('q');
+  const cursor = searchParams.get('cursor');
+  const sortKey = searchParams.get('sort.key');
+  const sortReverse = searchParams.get('sort.reverse') === 'true';
+  const filterEntriesWithValues = [...searchParams.entries()]
+    .filter(([key]) => key.startsWith('filter.'))
+    .map(([key, value]) => [key.replace(/^filter\./, ''), JSON.parse(value)]);
+
+  const formattedFilters = filterEntriesWithValues.map(([key, val]) => ({
+    [key]: val,
+  }));
+
+  return {
+    handle,
+    country: countryCode,
+    language: languageCode,
+    pageBy: PAGINATION_SIZE,
+    searchTerm,
+    productFilters: formattedFilters,
+    sortKey,
+    sortReverse,
+    after: cursor,
+  };
 }
 
 // API to paginate the results of the search query.
@@ -102,72 +137,64 @@ export async function api(
   }
 
   const url = new URL(request.url);
-  const cursor = url.searchParams.get('cursor');
-  const country = url.searchParams.get('country');
-  const searchTerm = url.searchParams.get('q');
+  const countryCode = url.searchParams.get('country');
+  const languageCode = url.searchParams.get('language');
   const {handle} = params;
 
   return await queryShop({
-    query: PAGINATE_SEARCH_QUERY,
-    variables: {
+    query: SEARCH_QUERY,
+    variables: getSearchVariables(url.searchParams, {
       handle,
-      cursor,
-      pageBy: PAGINATION_SIZE,
-      country,
-      searchTerm,
-    },
+      countryCode,
+      languageCode,
+    }),
   });
 }
 
 const SEARCH_QUERY = gql`
   ${PRODUCT_CARD_FRAGMENT}
+  ${ARTICLE_CARD_FRAGMENT}
+  ${PAGE_CARD_FRAGMENT}
   query search(
-    $searchTerm: String
+    $searchTerm: String!
     $country: CountryCode
     $language: LanguageCode
     $pageBy: Int!
     $after: String
+    $productFilters: [ProductFilter!]
+    $sortKey: SearchSortKeys
+    $sortReverse: Boolean
   ) @inContext(country: $country, language: $language) {
-    products(
+    search(
       first: $pageBy
-      sortKey: RELEVANCE
       query: $searchTerm
       after: $after
+      types: [PRODUCT, ARTICLE, PAGE]
+      productFilters: $productFilters
+      sortKey: $sortKey
+      reverse: $sortReverse
     ) {
+      productFilters {
+        id
+        label
+        type
+        values {
+          id
+          count
+          label
+          input
+        }
+      }
       nodes {
         ...ProductCard
+        ...ArticleCard
+        ...PageCard
       }
       pageInfo {
         startCursor
         endCursor
         hasNextPage
         hasPreviousPage
-      }
-    }
-  }
-`;
-
-const PAGINATE_SEARCH_QUERY = gql`
-  ${PRODUCT_CARD_FRAGMENT}
-  query ProductsPage(
-    $searchTerm: String
-    $pageBy: Int!
-    $cursor: String
-    $country: CountryCode
-    $language: LanguageCode
-  ) @inContext(country: $country, language: $language) {
-    products(
-      sortKey: RELEVANCE
-      query: $searchTerm
-      first: $pageBy
-      after: $cursor
-    ) {
-      nodes {
-        ...ProductCard
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
       }
     }
   }

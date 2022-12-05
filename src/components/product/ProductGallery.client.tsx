@@ -1,6 +1,7 @@
 import {MediaFile} from '@shopify/hydrogen/client';
 import type {MediaEdge} from '@shopify/hydrogen/storefront-api-types';
 import {ATTR_LOADING_EAGER} from '~/lib/const';
+import {fixImageUrl} from '~/lib/utils';
 
 /**
  * A client component that defines a media gallery for hosting images, 3D models, and videos of products
@@ -31,6 +32,8 @@ export function ProductGallery({
           image: {
             // @ts-ignore
             ...med.image,
+            // @ts-ignore
+            url: fixImageUrl(med.image?.url),
             altText: med.alt || 'Product image',
           },
         };

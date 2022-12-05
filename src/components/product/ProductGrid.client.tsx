@@ -1,30 +1,65 @@
 import {useState, useRef, useEffect, useCallback} from 'react';
-import {Link, flattenConnection} from '@shopify/hydrogen';
+import {Link, flattenConnection, useUrl} from '@shopify/hydrogen';
 
-import {Button, Grid, ProductCard} from '~/components';
+import {Button, Grid, type Resource, ResourceCard} from '~/components';
 import {getImageLoadingPriority} from '~/lib/const';
-import type {Collection, Product} from '@shopify/hydrogen/storefront-api-types';
+import type {
+  ProductConnection,
+  Product,
+  ProductVariant,
+  ProductVariantConnection,
+  Article,
+  ArticleConnection,
+  Page,
+  PageConnection,
+} from '@shopify/hydrogen/storefront-api-types';
+import {getProductPlaceholder} from '~/lib/placeholders';
 
+type AllowedResource = Product | Article | Page;
+
+/**
+ * Just hacking here - really, there should be a "ResourceGrid" instead of "ProductGrid" as this now supports things like articles
+ */
 export function ProductGrid({
   url,
-  collection,
+  resourceConnection,
+  collectionType,
 }: {
   url: string;
-  collection: Collection;
+  resourceConnection: ProductConnection | ArticleConnection | PageConnection;
+  collectionType: 'products' | 'collections' | 'search';
 }) {
+  const {searchParams} = useUrl();
   const nextButtonRef = useRef(null);
-  const initialProducts = collection?.products?.nodes || [];
-  const {hasNextPage, endCursor} = collection?.products?.pageInfo ?? {};
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [cursor, setCursor] = useState(endCursor ?? '');
-  const [nextPage, setNextPage] = useState(hasNextPage);
   const [pending, setPending] = useState(false);
-  const haveProducts = initialProducts.length > 0;
 
-  const fetchProducts = useCallback(async () => {
+  const initialResources = resourceConnection.nodes;
+  const {hasNextPage, endCursor} = resourceConnection.pageInfo;
+  const [{resources, nextPage, cursor}, setResourceInfo] = useState({
+    resources: resourceConnection.nodes as AllowedResource[],
+    nextPage: hasNextPage,
+    cursor: endCursor ?? '',
+  });
+
+  // if the nodes or page info changes, we need to reset our resources. this can happen when the user changes filters
+  useEffect(() => {
+    const nodes = resourceConnection.nodes;
+    const {hasNextPage, endCursor} = resourceConnection.pageInfo;
+    setResourceInfo({
+      resources: nodes,
+      nextPage: hasNextPage,
+      cursor: endCursor ?? '',
+    });
+  }, [resourceConnection.nodes, resourceConnection.pageInfo]);
+
+  const fetchResources = useCallback(async () => {
     setPending(true);
     const postUrl = new URL(window.location.origin + url);
     postUrl.searchParams.set('cursor', cursor);
+    const currentParams = new URLSearchParams(searchParams);
+    [...currentParams.entries()].forEach(([key, value]) => {
+      postUrl.searchParams.append(key, value);
+    });
 
     const response = await fetch(postUrl, {
       method: 'POST',
@@ -32,45 +67,54 @@ export function ProductGrid({
     const {data} = await response.json();
 
     // ProductGrid can paginate collection, products and search routes
+    const resourceConnection = (() => {
+      switch (collectionType) {
+        case 'collections':
+          return data?.collection.products;
+        case 'products':
+          return data?.products;
+        case 'search':
+          return data?.search;
+        default:
+          throw new Error('Invalid collection type');
+      }
+    })();
+
     // @ts-ignore TODO: Fix types
-    const newProducts: Product[] = flattenConnection<Product>(
-      data?.collection?.products || data?.products || [],
-    );
-    const {endCursor, hasNextPage} = data?.collection?.products?.pageInfo ||
-      data?.products?.pageInfo || {endCursor: '', hasNextPage: false};
+    const newResources: AllowedResource[] =
+      flattenConnection(resourceConnection);
+    const {endCursor, hasNextPage} = resourceConnection.pageInfo;
 
-    setProducts([...products, ...newProducts]);
-    setCursor(endCursor);
-    setNextPage(hasNextPage);
+    setResourceInfo((currentInfo) => ({
+      resources: [...currentInfo.resources, ...newResources],
+      nextPage: hasNextPage,
+      cursor: endCursor,
+    }));
     setPending(false);
-  }, [cursor, url, products]);
-
-  const handleIntersect = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          fetchProducts();
-        }
-      });
-    },
-    [fetchProducts],
-  );
+  }, [url, cursor, searchParams, collectionType]);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(handleIntersect, {
-      rootMargin: '100%',
-    });
-
     const nextButton = nextButtonRef.current;
+    if (!nextButton) {
+      return;
+    }
 
-    if (nextButton) observer.observe(nextButton);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          fetchResources();
+        }
+      },
+      {
+        rootMargin: '100%',
+      },
+    );
 
-    return () => {
-      if (nextButton) observer.unobserve(nextButton);
-    };
-  }, [nextButtonRef, cursor, handleIntersect]);
+    observer.observe(nextButton);
+    return () => observer.unobserve(nextButton);
+  }, [fetchResources]);
 
-  if (!haveProducts) {
+  if (initialResources.length === 0) {
     return (
       <>
         <p>No products found on this collection</p>
@@ -84,13 +128,67 @@ export function ProductGrid({
   return (
     <>
       <Grid layout="products">
-        {products.map((product, i) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            loading={getImageLoadingPriority(i)}
-          />
-        ))}
+        {resources.map((resource, i) => {
+          const convertedResource: Resource = (() => {
+            switch (resource.__typename) {
+              case 'Product': {
+                const cardData = resource?.variants
+                  ? resource
+                  : getProductPlaceholder();
+
+                const {
+                  image,
+                  priceV2: price,
+                  compareAtPriceV2: compareAtPrice,
+                } = flattenConnection<ProductVariant>(
+                  cardData?.variants as ProductVariantConnection,
+                )[0] || {};
+
+                return {
+                  id: resource.id,
+                  title: resource.title,
+                  url: `/products/${resource.handle}`,
+                  publishedAt: resource.publishedAt,
+                  image,
+                  price,
+                  compareAtPrice,
+                };
+              }
+
+              case 'Article': {
+                return {
+                  id: resource.id,
+                  title: resource.title,
+                  url: `/journal/${resource.handle}`,
+                  publishedAt: resource.publishedAt,
+                  image: resource.image,
+                };
+              }
+
+              case 'Page': {
+                return {
+                  id: resource.id,
+                  title: resource.title,
+                  url: `/pages/${resource.handle}`,
+                  publishedAt: resource.createdAt,
+                };
+              }
+
+              default: {
+                throw new Error(
+                  `Invalid resource type: ${resource.__typename}`,
+                );
+              }
+            }
+          })() as any;
+          return (
+            <ResourceCard
+              key={resource.id}
+              resource={convertedResource}
+              loading={getImageLoadingPriority(i)}
+            />
+          );
+        })}
       </Grid>
 
       {nextPage && (
@@ -101,7 +199,7 @@ export function ProductGrid({
           <Button
             variant="secondary"
             disabled={pending}
-            onClick={fetchProducts}
+            onClick={fetchResources}
             width="full"
           >
             {pending ? 'Loading...' : 'Load more products'}

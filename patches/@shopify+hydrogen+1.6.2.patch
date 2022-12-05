@@ -1,0 +1,26 @@
+diff --git a/node_modules/@shopify/hydrogen/dist/esnext/hooks/useShopQuery/hooks.js b/node_modules/@shopify/hydrogen/dist/esnext/hooks/useShopQuery/hooks.js
+index 6c6b55c..52e71cc 100644
+--- a/node_modules/@shopify/hydrogen/dist/esnext/hooks/useShopQuery/hooks.js
++++ b/node_modules/@shopify/hydrogen/dist/esnext/hooks/useShopQuery/hooks.js
+@@ -153,7 +153,7 @@ function useCreateShopRequest({ body, request, storeDomain, storefrontToken, sto
+     headers = { ...headers, ...extraHeaders };
+     return {
+         key: [storeDomain, storefrontApiVersion, body],
+-        url: `https://${storeDomain}/api/${storefrontApiVersion}/graphql.json`,
++        url: `https://${storeDomain}/api/${storefrontApiVersion}/graphql.json?fast_storefront_renderer=1`,
+         requestInit: {
+             body,
+             method: 'POST',
+diff --git a/node_modules/@shopify/hydrogen/dist/esnext/utilities/apiRoutes.js b/node_modules/@shopify/hydrogen/dist/esnext/utilities/apiRoutes.js
+index 85164fc..b6132ee 100644
+--- a/node_modules/@shopify/hydrogen/dist/esnext/utilities/apiRoutes.js
++++ b/node_modules/@shopify/hydrogen/dist/esnext/utilities/apiRoutes.js
+@@ -89,7 +89,7 @@ function queryShopBuilder(shopifyConfigGetter, request) {
+             privateStorefrontToken,
+             storefrontId,
+         });
+-        const fetcher = fetchBuilder(`https://${storeDomain}/api/${storefrontApiVersion}/graphql.json`, {
++        const fetcher = fetchBuilder(`https://${storeDomain}/api/${storefrontApiVersion}/graphql.json?fast_storefront_renderer=1`, {
+             method: 'POST',
+             body: graphqlRequestBody(query, variables),
+             headers: {

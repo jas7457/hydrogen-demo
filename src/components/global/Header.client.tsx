@@ -1,5 +1,6 @@
-import {Link, useUrl, useCart} from '@shopify/hydrogen';
-import {useWindowScroll} from 'react-use';
+import {Link, useUrl, useCart, useLocalization, Image} from '@shopify/hydrogen';
+import {useState} from 'react';
+import {useDebounce, useWindowScroll} from 'react-use';
 
 import {
   Heading,
@@ -14,7 +15,7 @@ import {CartDrawer} from './CartDrawer.client';
 import {MenuDrawer} from './MenuDrawer.client';
 import {useDrawer} from './Drawer.client';
 
-import type {EnhancedMenu} from '~/lib/utils';
+import {EnhancedMenu, fixImageUrl} from '~/lib/utils';
 
 /**
  * A client component that specifies the content of the header on the website
@@ -150,6 +151,90 @@ function DesktopHeader({
   title: string;
 }) {
   const {y} = useWindowScroll();
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<
+    Record<
+      'products' | 'pages' | 'articles',
+      {
+        id: string;
+        title: string;
+        image: {url: string; altText?: string} | undefined;
+        url: string;
+      }[]
+    >
+  >({
+    products: [],
+    pages: [],
+    articles: [],
+  });
+  const [inputFocused, setInputFocused] = useState(false);
+
+  const {
+    language: {isoCode: languageCode},
+  } = useLocalization();
+
+  useDebounce(
+    () => {
+      if (!search) {
+        setSearchResults({
+          products: [],
+          articles: [],
+          pages: [],
+        });
+        return;
+      }
+
+      const controller = new AbortController();
+      const fetchData = async () => {
+        try {
+          const postUrl = `/predictiveSearch?query=${search}&language=${languageCode}&country=${
+            countryCode ?? 'US'
+          }`;
+
+          const response = await fetch(postUrl, {
+            method: 'POST',
+            signal: controller.signal,
+          });
+
+          // TODO: type this
+          const {data} = await response.json();
+
+          setSearchResults({
+            products: data.predictiveSearch.products.map((product: any) => {
+              return {
+                title: product.title,
+                image: product.variants?.nodes?.[0]?.image,
+                url: `/products/${product.handle}`,
+              };
+            }),
+            articles: data.predictiveSearch.articles.map((article: any) => {
+              return {
+                title: article.title,
+                image: article.image,
+                url: `/journal/${article.handle}`,
+              };
+            }),
+            pages: data.predictiveSearch.pages.map((page: any) => {
+              return {
+                title: page.title,
+                image: undefined,
+                url: `/pages/${page.handle}`,
+              };
+            }),
+          });
+        } catch {
+          /* empty */
+        }
+      };
+
+      fetchData();
+      return () => {
+        controller.abort();
+      };
+    },
+    500,
+    [countryCode, languageCode, search],
+  );
 
   const styles = {
     button:
@@ -179,25 +264,107 @@ function DesktopHeader({
         </nav>
       </div>
       <div className="flex items-center gap-1">
-        <form
-          action={`/${countryCode ? countryCode + '/' : ''}search`}
-          className="flex items-center gap-2"
-        >
-          <Input
-            className={
-              isHome
-                ? 'focus:border-contrast/20 dark:focus:border-primary/20'
-                : 'focus:border-primary/20'
-            }
-            type="search"
-            variant="minisearch"
-            placeholder="Search"
-            name="q"
-          />
-          <button type="submit" className={styles.button}>
-            <IconSearch />
-          </button>
-        </form>
+        <div className="relative">
+          <form
+            action={`/${countryCode ? countryCode + '/' : ''}search`}
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              if (!search) {
+                e.preventDefault();
+              }
+            }}
+          >
+            <Input
+              className={
+                isHome
+                  ? 'focus:border-contrast/20 dark:focus:border-primary/20'
+                  : 'focus:border-primary/20'
+              }
+              type="search"
+              variant="minisearch"
+              placeholder="Search"
+              name="q"
+              value={search}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => {
+                setTimeout(() => setInputFocused(false), 200);
+              }}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+            />
+            <button type="submit" className={styles.button}>
+              <IconSearch />
+            </button>
+          </form>
+
+          {inputFocused && search.length > 0 && (
+            <div className="absolute top-full mt-2 w-full">
+              <div className="bg-white text-gray-800 p-4 flex flex-col gap-8">
+                {Object.values(searchResults).some(
+                  (items) => items.length > 0,
+                ) && (
+                  <div className="flex flex-col gap-4">
+                    {Object.entries(searchResults)
+                      .filter(([_key, items]) => items.length > 0)
+                      .map(([key, items]) => {
+                        const categoryName = {
+                          products: 'Products',
+                          articles: 'Articles',
+                          pages: 'Pages',
+                        }[key];
+
+                        return (
+                          <div key={key} className="grid gap-1">
+                            <div className="font-light text-sm underline">
+                              {categoryName}
+                            </div>
+
+                            <ol className="grid gap-2">
+                              {items.map((item) => (
+                                <li key={item.id}>
+                                  <Link
+                                    className="flex items-center gap-x-2"
+                                    to={item.url}
+                                  >
+                                    {item.image?.url && (
+                                      <Image
+                                        width={24}
+                                        height={24}
+                                        src={fixImageUrl(item.image.url)}
+                                        className="w-6 h-6 object-cover"
+                                        alt={item.image.altText ?? ''}
+                                      />
+                                    )}
+
+                                    <div className="truncate flex-grow">
+                                      {item.title}
+                                    </div>
+                                  </Link>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                <Link
+                  className="flex gap-1 items-center"
+                  to={`/search?q=${search}`}
+                >
+                  <div>
+                    <IconSearch />
+                  </div>
+                  <div>
+                    Search for <q>{search}</q>
+                  </div>
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
         <Link to={'/account'} className={styles.button}>
           <IconAccount />
         </Link>

@@ -15,7 +15,7 @@ import {PRODUCT_CARD_FRAGMENT} from '~/lib/fragments';
 import {PageHeader, ProductGrid, Section, Text} from '~/components';
 import {NotFound, Layout} from '~/components/index.server';
 
-const pageBy = 48;
+const pageBy = 8;
 
 export default function Collection({params}: HydrogenRouteProps) {
   const {handle} = params;
@@ -69,7 +69,8 @@ export default function Collection({params}: HydrogenRouteProps) {
       <Section>
         <ProductGrid
           key={collection.id}
-          collection={collection}
+          collectionType="collections"
+          resourceConnection={collection.products}
           url={`/collections/${handle}?country=${country}`}
         />
       </Section>

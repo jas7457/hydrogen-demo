@@ -37,6 +37,32 @@ export const MEDIA_FRAGMENT = gql`
   }
 `;
 
+export const ARTICLE_CARD_FRAGMENT = gql`
+  fragment ArticleCard on Article {
+    id
+    title
+    publishedAt
+    handle
+    image {
+      url
+      altText
+      width
+      height
+    }
+    __typename
+  }
+`;
+
+export const PAGE_CARD_FRAGMENT = gql`
+  fragment PageCard on Page {
+    id
+    title
+    createdAt
+    handle
+    __typename
+  }
+`;
+
 export const PRODUCT_CARD_FRAGMENT = gql`
   fragment ProductCard on Product {
     id
@@ -62,5 +88,6 @@ export const PRODUCT_CARD_FRAGMENT = gql`
         }
       }
     }
+    __typename
   }
 `;

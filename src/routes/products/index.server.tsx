@@ -12,7 +12,6 @@ import {PRODUCT_CARD_FRAGMENT} from '~/lib/fragments';
 import {PAGINATION_SIZE} from '~/lib/const';
 import {ProductGrid, PageHeader, Section} from '~/components';
 import {Layout} from '~/components/index.server';
-import type {Collection} from '@shopify/hydrogen/storefront-api-types';
 
 export default function AllProducts() {
   return (
@@ -50,7 +49,8 @@ function AllProductsGrid() {
     <ProductGrid
       key="products"
       url={`/products?country=${countryCode}`}
-      collection={{products} as Collection}
+      collectionType="products"
+      resourceConnection={products}
     />
   );
 }
