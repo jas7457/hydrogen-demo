@@ -128,8 +128,12 @@ export function ProductGrid({
   return (
     <>
       <Grid layout="products">
-        {resources.map((resource, i) => {
+        {resources.map((resource, index) => {
           const convertedResource: Resource = (() => {
+            const queryParams =
+              collectionType === 'search' && resource.searchTrackingParameters
+                ? `?${resource.searchTrackingParameters}`
+                : '';
             switch (resource.__typename) {
               case 'Product': {
                 const cardData = resource?.variants
@@ -147,7 +151,7 @@ export function ProductGrid({
                 return {
                   id: resource.id,
                   title: resource.title,
-                  url: `/products/${resource.handle}`,
+                  url: `/products/${resource.handle}${queryParams}`,
                   publishedAt: resource.publishedAt,
                   image,
                   price,
@@ -159,7 +163,7 @@ export function ProductGrid({
                 return {
                   id: resource.id,
                   title: resource.title,
-                  url: `/journal/${resource.handle}`,
+                  url: `/journal/${resource.handle}${queryParams}`,
                   publishedAt: resource.publishedAt,
                   image: resource.image,
                 };
@@ -169,7 +173,7 @@ export function ProductGrid({
                 return {
                   id: resource.id,
                   title: resource.title,
-                  url: `/pages/${resource.handle}`,
+                  url: `/pages/${resource.handle}${queryParams}`,
                   publishedAt: resource.createdAt,
                 };
               }
@@ -185,7 +189,7 @@ export function ProductGrid({
             <ResourceCard
               key={resource.id}
               resource={convertedResource}
-              loading={getImageLoadingPriority(i)}
+              loading={getImageLoadingPriority(index)}
             />
           );
         })}

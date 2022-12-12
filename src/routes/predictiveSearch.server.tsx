@@ -41,6 +41,7 @@ const PREDICTIVE_SEARCH_QUERY = gql`
         id
         title
         handle
+        searchTrackingParameters
         variants(first: 1) {
           nodes {
             id
@@ -57,11 +58,13 @@ const PREDICTIVE_SEARCH_QUERY = gql`
         id
         title
         handle
+        searchTrackingParameters
       }
       articles {
         id
         title
         handle
+        searchTrackingParameters
         image {
           url
           altText
